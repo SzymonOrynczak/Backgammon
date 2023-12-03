@@ -6,16 +6,17 @@
 
 #define _CRT_SECURE_NO_WARNINGS
 
-#define BOTHORIZONTALBORDER 21
-#define RIGHTVERTICALBORDER 29
 #define MAXPAWNS 15
 #define MAXCHARLENGTH 16
 #define FIELDTABLESIZE 24
-#define BANDX 14
 
+// borders of a board
 #define TOPHORIZONTALBORDER 1
 #define LEFTVERTIVALBORDER 1
 #define HORIZONTALMIDDLE 11
+#define BANDX 14
+#define BOTHORIZONTALBORDER 21
+#define RIGHTVERTICALBORDER 29
 
 // indexes of fields
 #define WHITEHOMESTART 0
@@ -23,8 +24,19 @@
 #define REDHOMESTART 18
 #define REDHOMEEND 23
 
+// symbols
 #define CURSORCHAR '*'
 #define PAWNCHAR 'o'
+
+
+enum MoveDirection
+{
+	LEFT,
+	RIGHT,
+	UP,
+	DOWN,
+	NONE
+};
 
 
 struct Band
@@ -40,6 +52,7 @@ struct Field
 	int color;
 	int positionX;
 	int firstPositionY;
+	int index;
 };
 
 
@@ -70,6 +83,8 @@ struct Game
 	Board board;
 	int dice1Value;
 	int dice2Value;
+	int cursorPositionX;
+	int cursorPositionY;
 	Player* whitePlayer;
 	Player* redPlayer;
 	Player* whoseTurn;
@@ -157,8 +172,8 @@ void initPawnPosition(Board* board)
 	{
 		if (board->fieldTable[i].nOfPawns == 0)
 		{
-			board->fieldTable[i].nOfPawns = 1;
-			board->fieldTable[i].color = WHITE;
+			gotoxy(board->fieldTable[i].positionX, board->fieldTable[i].firstPositionY);
+			putch('|');
 		}
 	}
 }
@@ -203,11 +218,11 @@ void drawBoardBoundaries()
 
 
 //na podstawie x znajduje field
-Field* identifyFieldByX(Game* game, int positionX)
+Field* identifyFieldByX(Game* game)
 {
 	for (int fieldIndex = 0; fieldIndex < FIELDTABLESIZE; fieldIndex++)
 	{
-		if (game->board.fieldTable[fieldIndex].positionX == positionX)
+		if (game->board.fieldTable[fieldIndex].positionX == game->cursorPositionX)
 		{
 			return &game->board.fieldTable[fieldIndex];
 		}
@@ -262,6 +277,7 @@ void initFields(Game* game)
 			currentField->firstPositionY = TOPHORIZONTALBORDER + 1;
 		}
 
+		currentField->index = fieldIndex;
 		//printf("Index: %d - x: %d, y: %d\n",fieldIndex, game->board.fieldTable[fieldIndex].positionX, game->board.fieldTable[fieldIndex].firstPositionY);
 	}
 }
@@ -327,11 +343,12 @@ void drawPawnsOnFields(Game* game)
 
 void printBoard(Game* game)
 {
-	drawBoardBoundaries();
 	drawPawnsOnFields(game);
+	drawBoardBoundaries();
 }
 
 
+// ta funkcja nie wiem po co jest i piszę jakby jej nie było - nie jest używana
 int pickField(Game game)
 {
 	int cursorX = RIGHTVERTICALBORDER / 2;
@@ -383,19 +400,81 @@ void initGame(Game* game)
 	rollStartPlayer(game);
 }
 
+// realizuje chodzenie po planszych po patykach
+void moveCursor(Game* game, MoveDirection moveDirection)
+{
+	Field* currentField = identifyFieldByX(game);
+	int defaultPositionY = currentField->firstPositionY;
+
+	if (moveDirection == LEFT)
+	{
+		if (currentField->firstPositionY == BOTHORIZONTALBORDER - 1)
+		{
+			game->cursorPositionX = game->board.fieldTable[currentField->index + 1].positionX;
+		}
+
+		if (currentField->firstPositionY == TOPHORIZONTALBORDER + 1)
+		{
+			game->cursorPositionX = game->board.fieldTable[currentField->index - 1].positionX;
+		}
+	}
+
+	game->cursorPositionY = defaultPositionY;
+}
+
+
+// ta funkcja zawierać będzie funkcje, które obsługują poruszanie się na planszy, klawisze wywołujące jakieś działanie
+// na początek chodzić będziemy CURSORCHARem, gra będzie trwała do momentu, aż sami jej nie wyłączymy - tzn.
+// nic nie będzie znikało dopóki nie wciśniemy np. 'q'.
+void gameFlow(Game* game)
+{
+	//inicjalizacja początkowej pozycji kursora
+	game->cursorPositionX = game->board.fieldTable[0].positionX;
+	game->cursorPositionY = game->board.fieldTable[0].firstPositionY - game->board.fieldTable[0].nOfPawns;
+	
+	char charFromUser = '0';
+	MoveDirection moveDirection = NONE;
+	int iterationCounter = 0;
+
+	_setcursortype(_NOCURSOR);
+	while (charFromUser != 'q')
+	{
+		printBoard(game);
+		printf("x: %d, y: %d - counter: %d", game->cursorPositionX, game->cursorPositionY, iterationCounter);
+
+		gotoxy(game->cursorPositionX, game->cursorPositionY);
+		putch(CURSORCHAR);
+
+		charFromUser = getch();
+
+		if (charFromUser == 0x48) moveDirection = DOWN;
+		else if (charFromUser == 0x50) moveDirection = UP;
+		else if (charFromUser == 0x4b) moveDirection = LEFT;
+		else if (charFromUser == 0x4d) moveDirection = RIGHT;
+
+		if (moveDirection != NONE)
+		{
+			moveCursor(game, moveDirection);
+		}
+
+		iterationCounter++;
+		clrscr();
+	}
+}
+
 
 int main()
 {
 	Game game;
-	initGame(&game);
-	printBoard(&game);
-
 	srand(time(0));
-
-	_setcursortype(_NOCURSOR);
+	initGame(&game);
+	gameFlow(&game);
 	_setcursortype(_NORMALCURSOR);	
 	return 0;
 }
 
 //TODO: w funkcji initPawnPosition() są pozycje startowe pionków na danych polach, ale nie znamy współrzędnych tych pól.
 //TODO: czy współrzędna x dla pól powinna być z góry zdefiniowana?
+
+//TODO: Zrobić poruszanie po planszy
+//TODO: wszędzie gdzie są wspołrzędne kursora zamienić na game.cursorx albo y
