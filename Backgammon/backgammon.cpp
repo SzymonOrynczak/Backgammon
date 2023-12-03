@@ -6,19 +6,25 @@
 
 #define _CRT_SECURE_NO_WARNINGS
 
-#define BOARDSIZEY 21
-#define BOARDSIZEX 29
+#define BOTHORIZONTALBORDER 21
+#define RIGHTVERTICALBORDER 29
 #define MAXPAWNS 15
 #define MAXCHARLENGTH 16
 #define FIELDTABLESIZE 24
+#define BANDX 14
 
+#define TOPHORIZONTALBORDER 1
+#define LEFTVERTIVALBORDER 1
+#define HORIZONTALMIDDLE 11
+
+// indexes of fields
 #define WHITEHOMESTART 0
 #define WHITEHOMEEND 5
-
 #define REDHOMESTART 18
 #define REDHOMEEND 23
 
 #define CURSORCHAR '*'
+#define PAWNCHAR 'o'
 
 
 struct Band
@@ -32,6 +38,8 @@ struct Field
 {
 	int nOfPawns;
 	int color;
+	int positionX;
+	int firstPositionY;
 };
 
 
@@ -83,7 +91,7 @@ void rollDices(Game* game)
 	game->dice1Value = (rand() % 6) + 1;
 	game->dice2Value = (rand() % 6) + 1;
 
-	printRollResult(game);
+	//printRollResult(game);
 }
 
 
@@ -113,7 +121,7 @@ void initPlayers(Game* game)
 	game->whitePlayer = (Player*)malloc(sizeof(Player));
 	game->redPlayer = (Player*)malloc(sizeof(Player));
 
-	strcpy(game->whitePlayer->name, "Szymon");
+	strcpy(game->whitePlayer->name, "Szymon"); //napisać własne strcpy
 	strcpy(game->redPlayer->name, "Alicja");
 }
 
@@ -143,6 +151,16 @@ void initPawnPosition(Board* board)
 
 	board->fieldTable[23].nOfPawns = 2;
 	board->fieldTable[23].color = WHITE;
+
+
+	for (int i = 0; i < FIELDTABLESIZE; i++)
+	{
+		if (board->fieldTable[i].nOfPawns == 0)
+		{
+			board->fieldTable[i].nOfPawns = 1;
+			board->fieldTable[i].color = WHITE;
+		}
+	}
 }
 
 
@@ -163,19 +181,19 @@ void initEmptyBoard(Board* board)
 
 void drawBoardBoundaries()
 {
-	for (int j=1; j <= BOARDSIZEY; j++)
+	for (int j = LEFTVERTIVALBORDER; j <= BOTHORIZONTALBORDER; j++)
 	{
-		for (int i = 1; i <= BOARDSIZEX; i++)
+		for (int i = TOPHORIZONTALBORDER; i <= RIGHTVERTICALBORDER; i++)
 		{
 			gotoxy(i, j);
 
-			if (i == 1 || i == BOARDSIZEX || i == BOARDSIZEX - 2 || i == BOARDSIZEX/2 - 1||
-				i == BOARDSIZEX / 2 + 1)
+			if (i == TOPHORIZONTALBORDER || i == RIGHTVERTICALBORDER || i == RIGHTVERTICALBORDER - 2 || i == BANDX - 1||
+				i == BANDX + 1)
 			{
 				cputs("|");
 			}
 
-			else if(j == BOARDSIZEY/2 + 1 || j == 1 || j == BOARDSIZEY)
+			else if(j == HORIZONTALMIDDLE || j == LEFTVERTIVALBORDER || j == BOTHORIZONTALBORDER)
 			{
 				cputs("-");
 			}
@@ -184,26 +202,140 @@ void drawBoardBoundaries()
 }
 
 
-void initGame(Game* game)
+//na podstawie x znajduje field
+Field* identifyFieldByX(Game* game, int positionX)
 {
-	initEmptyBoard(&game->board);
-	initPawnPosition(&game->board);
-	initPlayers(game);
-	rollStartPlayer(game);
+	for (int fieldIndex = 0; fieldIndex < FIELDTABLESIZE; fieldIndex++)
+	{
+		if (game->board.fieldTable[fieldIndex].positionX == positionX)
+		{
+			return &game->board.fieldTable[fieldIndex];
+		}
+	}
+
+	return nullptr;
 }
 
 
-Field identifyField()
+void initFields(Game* game)
 {
+	// starting positions of field's x in particular quadrants
+	int positionXRightBot = RIGHTVERTICALBORDER - 3;
+	int positionXLeftBot = BANDX - 2;
+	int positionXLeftTop = LEFTVERTIVALBORDER + 1;
+	int positionXRightTop = BANDX + 2;
 
+
+	for (int fieldIndex = 0; fieldIndex < FIELDTABLESIZE; fieldIndex++)
+	{
+		Field* currentField = &game->board.fieldTable[fieldIndex]; //czy to moze byc definiowane w tym miejscu?
+
+		//prawy-dolny
+		if (fieldIndex < 6) //ostatni patyk w prawym-dolnym ma indeks 6
+		{
+			currentField->positionX = positionXRightBot;
+			positionXRightBot -= 2; //idziemy o dwa w lewo 
+			currentField->firstPositionY = BOTHORIZONTALBORDER - 1;
+		}
+
+		//lewy-dolny
+		else if (fieldIndex >= 6 && fieldIndex < 12)
+		{
+			currentField->positionX = positionXLeftBot;
+			positionXLeftBot -= 2;
+			currentField->firstPositionY = BOTHORIZONTALBORDER - 1;
+		}
+
+		//lewy-górny
+		else if (fieldIndex >= 12 && fieldIndex < 18)
+		{
+			currentField->positionX = positionXLeftTop;
+			positionXLeftTop += 2;
+			currentField->firstPositionY = TOPHORIZONTALBORDER + 1;
+		}
+
+		//prawy górny
+		else if (fieldIndex >= 18)
+		{
+			currentField->positionX = positionXRightTop;
+			positionXRightTop += 2;
+			currentField->firstPositionY = TOPHORIZONTALBORDER + 1;
+		}
+
+		//printf("Index: %d - x: %d, y: %d\n",fieldIndex, game->board.fieldTable[fieldIndex].positionX, game->board.fieldTable[fieldIndex].firstPositionY);
+	}
 }
 
+
+//funkcja sprawdza czy ruch nie wychodzi poza granice planszy
+int ifMoveOnBoard(int currentX, int currentY)
+{
+	if (currentX + 1 > RIGHTVERTICALBORDER || currentX - 1 < LEFTVERTIVALBORDER)
+	{
+		return 0;
+	}
+
+	if (currentY + 1 > BOTHORIZONTALBORDER || currentY - 1 < TOPHORIZONTALBORDER)
+	{
+		return 0;
+	}
+
+	return 1;
+}
+
+
+//funkcja stworzona by nie powielać kodu
+void drawSinglePawn(Game* game, int currentX, int currentY, int playerColor)
+{
+	//printf("x: %d, y: %d \n", currentX, currentY);
+	gotoxy(currentX, currentY);
+	textcolor(playerColor);
+	putch(PAWNCHAR);
+}
+
+
+void drawPawnsOnFields(Game* game)
+{
+	//printf("%d", game->board.fieldTable[0].color);
+
+	for (int fieldIndex = 0; fieldIndex < FIELDTABLESIZE; fieldIndex++)
+	{
+		Field* currentField = &game->board.fieldTable[fieldIndex];
+
+		//printf("Index: %d - starting y: %d \n", fieldIndex, currentField.firstPositionY);
+
+		for (int pawnIndex = 0; pawnIndex < currentField->nOfPawns; pawnIndex++)
+		{
+			if (currentField->firstPositionY == TOPHORIZONTALBORDER + 1)
+			{
+				drawSinglePawn(game, currentField->positionX, currentField->firstPositionY + pawnIndex, currentField->color);
+			}
+
+			else if (currentField->firstPositionY == BOTHORIZONTALBORDER - 1)
+			{
+				drawSinglePawn(game, currentField->positionX, currentField->firstPositionY - pawnIndex, currentField->color);
+			}
+
+			else
+			{
+				printf("blad startowego y %d", currentField->firstPositionY);
+			}
+		}
+	}
+}
+
+
+void printBoard(Game* game)
+{
+	drawBoardBoundaries();
+	drawPawnsOnFields(game);
+}
 
 
 int pickField(Game game)
 {
-	int cursorX = BOARDSIZEX / 2;
-	int cursorY = BOARDSIZEY / 2;
+	int cursorX = RIGHTVERTICALBORDER / 2;
+	int cursorY = BOTHORIZONTALBORDER / 2;
 	int textColor = CYAN;
 	char charFromUser;
 
@@ -242,15 +374,28 @@ int pickField(Game game)
 }
 
 
+void initGame(Game* game)
+{
+	initEmptyBoard(&game->board);
+	initFields(game);
+	initPawnPosition(&game->board);
+	initPlayers(game);
+	rollStartPlayer(game);
+}
+
+
 int main()
 {
 	Game game;
+	initGame(&game);
+	printBoard(&game);
+
 	srand(time(0));
 
 	_setcursortype(_NOCURSOR);
-	initGame(&game);
-	pickField(game);
-
 	_setcursortype(_NORMALCURSOR);	
 	return 0;
 }
+
+//TODO: w funkcji initPawnPosition() są pozycje startowe pionków na danych polach, ale nie znamy współrzędnych tych pól.
+//TODO: czy współrzędna x dla pól powinna być z góry zdefiniowana?
