@@ -29,6 +29,13 @@
 #define PAWNCHAR 'o'
 
 
+enum CursorState
+{
+	PICK_PAWN,
+	PLACE_PAWN
+};
+
+
 enum MoveDirection
 {
 	LEFT,
@@ -88,6 +95,13 @@ struct Game
 	Player* whitePlayer;
 	Player* redPlayer;
 	Player* whoseTurn;
+};
+
+
+struct PlayerMove
+{
+	int startFieldIndex;
+	int endFieldIndex;
 };
 
 
@@ -166,16 +180,6 @@ void initPawnPosition(Board* board)
 
 	board->fieldTable[23].nOfPawns = 2;
 	board->fieldTable[23].color = WHITE;
-
-
-	for (int i = 0; i < FIELDTABLESIZE; i++)
-	{
-		if (board->fieldTable[i].nOfPawns == 0)
-		{
-			gotoxy(board->fieldTable[i].positionX, board->fieldTable[i].firstPositionY);
-			putch('|');
-		}
-	}
 }
 
 
@@ -190,11 +194,12 @@ void initEmptyBoard(Board* board)
 	for (int i = 0; i < FIELDTABLESIZE; i++)
 	{
 		board->fieldTable[i].nOfPawns = 0;
+		board->fieldTable[i].color = -1;
 	}
 }
 
 
-void drawBoardBoundaries()
+void drawBoardBoundaries(Board* board)
 {
 	for (int j = LEFTVERTIVALBORDER; j <= BOTHORIZONTALBORDER; j++)
 	{
@@ -214,25 +219,49 @@ void drawBoardBoundaries()
 			}
 		}
 	}
+
+	for (int i = 0; i < FIELDTABLESIZE; i++)
+	{
+		if (board->fieldTable[i].nOfPawns == 0)
+		{
+			gotoxy(board->fieldTable[i].positionX, board->fieldTable[i].firstPositionY);
+			putch('|');
+		}
+	}
 }
 
 
-//na podstawie x znajduje field
-Field* identifyFieldByX(Game* game)
+Field* identifyFieldByCursorPosition(Game* game)
 {
-	for (int fieldIndex = 0; fieldIndex < FIELDTABLESIZE; fieldIndex++)
+	// górne pola
+	if (game->cursorPositionY < HORIZONTALMIDDLE)
 	{
-		if (game->board.fieldTable[fieldIndex].positionX == game->cursorPositionX)
+		for (int fieldIndex = FIELDTABLESIZE/2; fieldIndex < FIELDTABLESIZE; fieldIndex++)
 		{
-			return &game->board.fieldTable[fieldIndex];
+			if (game->cursorPositionX == game->board.fieldTable[fieldIndex].positionX)
+			{
+				return &game->board.fieldTable[fieldIndex];
+			}
 		}
 	}
 
-	return nullptr;
+	// dolne pola
+	else
+	{
+		for (int fieldIndex = 0; fieldIndex < FIELDTABLESIZE/2; fieldIndex++)
+		{
+			if (game->cursorPositionX == game->board.fieldTable[fieldIndex].positionX)
+			{
+				return &game->board.fieldTable[fieldIndex];
+			}
+		}
+	}
+
+	return NULL;
 }
 
 
-void initFields(Game* game)
+void initFields(Field fieldTable[FIELDTABLESIZE])
 {
 	// starting positions of field's x in particular quadrants
 	int positionXRightBot = RIGHTVERTICALBORDER - 3;
@@ -243,13 +272,13 @@ void initFields(Game* game)
 
 	for (int fieldIndex = 0; fieldIndex < FIELDTABLESIZE; fieldIndex++)
 	{
-		Field* currentField = &game->board.fieldTable[fieldIndex]; //czy to moze byc definiowane w tym miejscu?
+		Field* currentField = &fieldTable[fieldIndex];
 
 		//prawy-dolny
 		if (fieldIndex < 6) //ostatni patyk w prawym-dolnym ma indeks 6
 		{
 			currentField->positionX = positionXRightBot;
-			positionXRightBot -= 2; //idziemy o dwa w lewo 
+			positionXRightBot -= 2;
 			currentField->firstPositionY = BOTHORIZONTALBORDER - 1;
 		}
 
@@ -278,7 +307,6 @@ void initFields(Game* game)
 		}
 
 		currentField->index = fieldIndex;
-		//printf("Index: %d - x: %d, y: %d\n",fieldIndex, game->board.fieldTable[fieldIndex].positionX, game->board.fieldTable[fieldIndex].firstPositionY);
 	}
 }
 
@@ -343,8 +371,8 @@ void drawPawnsOnFields(Game* game)
 
 void printBoard(Game* game)
 {
+	drawBoardBoundaries(&game->board);
 	drawPawnsOnFields(game);
-	drawBoardBoundaries();
 }
 
 
@@ -394,32 +422,211 @@ int pickField(Game game)
 void initGame(Game* game)
 {
 	initEmptyBoard(&game->board);
-	initFields(game);
+	initFields(game->board.fieldTable);
 	initPawnPosition(&game->board);
 	initPlayers(game);
 	rollStartPlayer(game);
 }
 
+
+void moveLeftOnBottom(Game* game, Field* currentField, int cursorPivot)
+{
+	game->cursorPositionX = game->board.fieldTable[currentField->index + 1].positionX;
+
+	// cursorPositionX przed ifem ma już pocyzję następnego pola
+	if (identifyFieldByCursorPosition(game)->nOfPawns == 0)
+	{
+		game->cursorPositionY = game->board.fieldTable[currentField->index + 1].firstPositionY;
+	}
+
+	else
+	{
+		game->cursorPositionY = game->board.fieldTable[currentField->index + 1].firstPositionY - game->board.fieldTable[currentField->index + 1].nOfPawns + cursorPivot;
+	}
+}
+
+
+void moveLeft(Game* game, Field* currentField, int cursorPivot)
+{
+	// dolne pola
+	if (currentField->firstPositionY == BOTHORIZONTALBORDER - 1)
+	{
+		moveLeftOnBottom(game, currentField, cursorPivot);
+	}
+
+	// górne pola
+	else if (currentField->firstPositionY == TOPHORIZONTALBORDER + 1)
+	{
+		game->cursorPositionX = game->board.fieldTable[currentField->index - 1].positionX;
+
+		if (identifyFieldByCursorPosition(game)->nOfPawns == 0)
+		{
+			game->cursorPositionY = game->board.fieldTable[currentField->index - 1].firstPositionY;
+		}
+
+		else
+		{
+			game->cursorPositionY = game->board.fieldTable[currentField->index - 1].firstPositionY + game->board.fieldTable[currentField->index - 1].nOfPawns - cursorPivot;
+		}
+	}
+}
+
+
 // realizuje chodzenie po planszych po patykach
 void moveCursor(Game* game, MoveDirection moveDirection)
 {
-	Field* currentField = identifyFieldByX(game);
-	int defaultPositionY = currentField->firstPositionY;
+	CursorState cursorState = PICK_PAWN;
+	Field* currentField = identifyFieldByCursorPosition(game);
+	int cursorPivot = 0; // zapewnia odpowiednie przesunięcie kursora w PICKPAWN i PLACEPAWN
+
+	// zaimplementować cursorPivot zamiast - 1 lub + 1
+	if (cursorState == PICK_PAWN)
+	{
+		cursorPivot = 1;
+	}
+
+	else if (cursorState == PLACE_PAWN)
+	{
+		cursorPivot = 0;
+	}
+
 
 	if (moveDirection == LEFT)
 	{
+		moveLeft(game, currentField, cursorPivot);
+	}
+
+	else if (moveDirection == RIGHT)
+	{
 		if (currentField->firstPositionY == BOTHORIZONTALBORDER - 1)
 		{
-			game->cursorPositionX = game->board.fieldTable[currentField->index + 1].positionX;
+			game->cursorPositionX = game->board.fieldTable[currentField->index - 1].positionX;
 		}
 
 		if (currentField->firstPositionY == TOPHORIZONTALBORDER + 1)
 		{
-			game->cursorPositionX = game->board.fieldTable[currentField->index - 1].positionX;
+			game->cursorPositionX = game->board.fieldTable[currentField->index + 1].positionX;
 		}
 	}
 
-	game->cursorPositionY = defaultPositionY;
+	else if (moveDirection == UP)
+	{
+		game->cursorPositionY = game->board.fieldTable[FIELDTABLESIZE - 1 - currentField->index].firstPositionY + currentField->nOfPawns - 1;
+	}
+
+	else if (moveDirection == DOWN)
+	{
+		game->cursorPositionY = game->board.fieldTable[currentField->index].firstPositionY - currentField->nOfPawns + 1;
+	}
+}
+
+
+void saveCourtToFile(Court court, FILE* writeFile)
+{
+	fprintf(writeFile, "%d %d\n", court.nOfWhitePawns, court.nOfRedPawns);
+}
+
+
+void saveBandToFile(Band band, FILE* writeFile)
+{
+	fprintf(writeFile, "%d %d\n", band.nOfWhitePawns, band.nOfRedPawns);
+}
+
+
+void saveFieldsToFile(Field fieldTable[FIELDTABLESIZE], FILE* writeFile)
+{
+	for (int fieldIndex = 0; fieldIndex < FIELDTABLESIZE; fieldIndex++)
+	{
+		fprintf(writeFile, "%d %d\n", fieldTable[fieldIndex].nOfPawns, fieldTable[fieldIndex].color);
+	}
+}
+
+
+void saveBoardToFile(Board* board, FILE* writeFile)
+{
+	saveBandToFile(board->band, writeFile);
+	saveCourtToFile(board->court, writeFile);
+	saveFieldsToFile(board->fieldTable, writeFile);
+}
+
+
+void saveGameToFile(Game* game)
+{
+	FILE* writeFile = fopen("backgammon.txt", "w");
+
+	if (writeFile == NULL)
+	{
+		printf("Nie udalo sie otworzyc pliku do zapisu");
+		return;
+	}
+
+	saveBoardToFile(&game->board, writeFile);
+
+	fprintf(writeFile, "%d %d\n", game->dice1Value, game->dice2Value);
+	fprintf(writeFile, "%d %d\n", game->cursorPositionX, game->cursorPositionY);
+	fprintf(writeFile, "%s %s\n", game->whitePlayer->name, game->redPlayer->name);
+	fprintf(writeFile, "%s\n", game->whoseTurn->name);
+
+	fclose(writeFile);
+
+	gotoxy(30, 2);
+	printf("Gra zapisana");
+	gotoxy(game->cursorPositionX, game->cursorPositionY);
+	putch(CURSORCHAR);
+}
+
+
+void readBandFromFile(Band* band, FILE* readFile)
+{
+	fscanf(readFile, "%d%d", &band->nOfWhitePawns, &band->nOfRedPawns);
+}
+
+
+void readCourtFromFile(Court* court, FILE* readFile)
+{
+	fscanf(readFile, "%d%d", &court->nOfWhitePawns, &court->nOfRedPawns);
+	printf("Court wczytany\n");
+}
+
+
+void readFieldsFromFile(Field fieldTable[FIELDTABLESIZE], FILE* readFile)
+{
+	for (int fieldIndex = 0; fieldIndex < FIELDTABLESIZE; fieldIndex++)
+	{
+		fscanf(readFile, "%d%d", &fieldTable[fieldIndex].nOfPawns, &fieldTable[fieldIndex].color);
+	}
+
+	printf("Pola wczytane\n");
+	initFields(fieldTable);
+	printf("Pola zainicjowane\n");
+}
+
+void readBoardFromFile(Board* board, FILE* readFile)
+{
+	readBandFromFile(&board->band, readFile);
+	readCourtFromFile(&board->court, readFile);
+	readFieldsFromFile(board->fieldTable, readFile);
+}
+
+
+void readGameFromFile(Game* game)
+{
+	FILE* readFile = fopen("backgammon.txt", "r");
+
+	if (readFile == NULL)
+	{
+		printf("Nie udalo sie otworzyc pliku do odczytu");
+		return;
+	}
+	
+	readBoardFromFile(&game->board, readFile);
+	
+	fscanf(readFile, "%d%d", &game->dice1Value, &game->dice2Value);
+	fscanf(readFile, "%d%d", &game->cursorPositionX, &game->cursorPositionY);
+	fscanf(readFile, "%s%s", &game->whitePlayer->name, &game->redPlayer->name);
+	fscanf(readFile, "%s", &game->whoseTurn->name);
+	
+	fclose(readFile);
 }
 
 
@@ -433,32 +640,41 @@ void gameFlow(Game* game)
 	game->cursorPositionY = game->board.fieldTable[0].firstPositionY - game->board.fieldTable[0].nOfPawns;
 	
 	char charFromUser = '0';
-	MoveDirection moveDirection = NONE;
-	int iterationCounter = 0;
 
 	_setcursortype(_NOCURSOR);
+
 	while (charFromUser != 'q')
 	{
+		clrscr();
+
 		printBoard(game);
-		printf("x: %d, y: %d - counter: %d", game->cursorPositionX, game->cursorPositionY, iterationCounter);
+
+		gotoxy(30, 1);
+		printf("x: %d, y: %d - index: %d", game->cursorPositionX, game->cursorPositionY, identifyFieldByCursorPosition(game)->index);
 
 		gotoxy(game->cursorPositionX, game->cursorPositionY);
 		putch(CURSORCHAR);
 
+		MoveDirection moveDirection = NONE;
 		charFromUser = getch();
 
-		if (charFromUser == 0x48) moveDirection = DOWN;
-		else if (charFromUser == 0x50) moveDirection = UP;
-		else if (charFromUser == 0x4b) moveDirection = LEFT;
-		else if (charFromUser == 0x4d) moveDirection = RIGHT;
+		if (charFromUser == 0)
+		{
+			charFromUser = getch();
+
+			if (charFromUser == 0x48) moveDirection = UP;
+			else if (charFromUser == 0x50) moveDirection = DOWN;
+			else if (charFromUser == 0x4b) moveDirection = LEFT;
+			else if (charFromUser == 0x4d) moveDirection = RIGHT;
+		}
+
+		else if (charFromUser == 's') saveGameToFile(game);
+		else if (charFromUser == 'r') readGameFromFile(game);
 
 		if (moveDirection != NONE)
 		{
 			moveCursor(game, moveDirection);
 		}
-
-		iterationCounter++;
-		clrscr();
 	}
 }
 
