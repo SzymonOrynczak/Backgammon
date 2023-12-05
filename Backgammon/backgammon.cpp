@@ -1,7 +1,6 @@
 ﻿#include "conio2.h"
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h> //to potem usunąć
 #include <time.h>
 
 #define _CRT_SECURE_NO_WARNINGS
@@ -27,6 +26,10 @@
 // symbols
 #define CURSORCHAR '*'
 #define PAWNCHAR 'o'
+
+// players
+#define WHITEPLAYER 0
+#define REDPLAYER 1
 
 
 enum CursorState
@@ -92,9 +95,10 @@ struct Game
 	int dice2Value;
 	int cursorPositionX;
 	int cursorPositionY;
-	Player* whitePlayer;
-	Player* redPlayer;
-	Player* whoseTurn;
+	Player whitePlayer;
+	Player redPlayer;
+	int whoseTurn; // 0 - white, 1 - red
+	CursorState cursorState;
 };
 
 
@@ -103,6 +107,34 @@ struct PlayerMove
 	int startFieldIndex;
 	int endFieldIndex;
 };
+
+
+void printBand(Band band)
+{
+	gotoxy(RIGHTVERTICALBORDER + 1, TOPHORIZONTALBORDER);
+	textcolor(WHITE);
+	cputs("Number of white pawns on the band: ");
+	putch(band.nOfWhitePawns + '0');
+
+	gotoxy(RIGHTVERTICALBORDER + 1, TOPHORIZONTALBORDER + 1);
+	textcolor(RED);
+	cputs("Number of red pawns on the band: ");
+	putch(band.nOfRedPawns + '0');
+}
+
+
+int returnColorOfCurrentPlayer(Game* game)
+{
+	if (game->whoseTurn == WHITEPLAYER)
+	{
+		return WHITE;
+	}
+
+	else if (game->whoseTurn == REDPLAYER)
+	{
+		return RED;
+	}
+}
 
 
 void printRollResult(Game* game)
@@ -124,34 +156,50 @@ void rollDices(Game* game)
 }
 
 
+void changePlayerTurn(Game* game)
+{
+	game->whoseTurn = (game->whoseTurn + 1) % 2;
+}
+
+
+void swapPlayers(Game* game)
+{
+	Player tempPlayer = game->whitePlayer;
+
+	game->whitePlayer = game->redPlayer;
+	game->redPlayer = tempPlayer;
+}
+
+
 void rollStartPlayer(Game* game)
 {
 	rollDices(game);
 
-	if (game->dice1Value > game->dice2Value)
+	if (game->dice2Value > game->dice1Value)
 	{
-		game->whoseTurn = game->whitePlayer;
+		swapPlayers(game);
 	}
 
-	else if (game->dice2Value > game->dice1Value)
-	{
-		game->whoseTurn = game->redPlayer;
-	}
-
-	else
+	else if (game->dice1Value == game->dice2Value)
 	{
 		rollStartPlayer(game);
 	}
+
+	game->whoseTurn = WHITEPLAYER;
 }
 
 
 void initPlayers(Game* game)
 {
-	game->whitePlayer = (Player*)malloc(sizeof(Player));
-	game->redPlayer = (Player*)malloc(sizeof(Player));
+	cputs("Podaj nazwy graczy: ");
 
-	strcpy(game->whitePlayer->name, "Szymon"); //napisać własne strcpy
-	strcpy(game->redPlayer->name, "Alicja");
+	int character = getche();
+	game->whitePlayer.name[0] = character;
+	game->whitePlayer.name[1] = '/0';
+
+	int character1 = getche();
+	game->redPlayer.name[0] = character1;
+	game->redPlayer.name[1] = '/0';
 }
 
 
@@ -371,8 +419,10 @@ void drawPawnsOnFields(Game* game)
 
 void printBoard(Game* game)
 {
+	textcolor(WHITE);
 	drawBoardBoundaries(&game->board);
 	drawPawnsOnFields(game);
+	printBand(game->board.band);
 }
 
 
@@ -426,6 +476,8 @@ void initGame(Game* game)
 	initPawnPosition(&game->board);
 	initPlayers(game);
 	rollStartPlayer(game);
+	game->cursorPositionX = game->board.fieldTable[0].positionX;
+	game->cursorPositionY = game->board.fieldTable[0].firstPositionY - game->board.fieldTable[0].nOfPawns;
 }
 
 
@@ -446,6 +498,23 @@ void moveLeftOnBottom(Game* game, Field* currentField, int cursorPivot)
 }
 
 
+void moveLeftOnTop(Game* game, Field* currentField, int cursorPivot)
+{
+	game->cursorPositionX = game->board.fieldTable[currentField->index - 1].positionX;
+
+	if (identifyFieldByCursorPosition(game)->nOfPawns == 0)
+	{
+		game->cursorPositionY = game->board.fieldTable[currentField->index - 1].firstPositionY;
+	}
+
+	else
+	{
+		game->cursorPositionY = game->board.fieldTable[currentField->index - 1].firstPositionY + game->board.fieldTable[currentField->index - 1].nOfPawns - cursorPivot;
+	}
+}
+
+
+
 void moveLeft(Game* game, Field* currentField, int cursorPivot)
 {
 	// dolne pola
@@ -457,17 +526,82 @@ void moveLeft(Game* game, Field* currentField, int cursorPivot)
 	// górne pola
 	else if (currentField->firstPositionY == TOPHORIZONTALBORDER + 1)
 	{
-		game->cursorPositionX = game->board.fieldTable[currentField->index - 1].positionX;
+		moveLeftOnTop(game, currentField, cursorPivot);
+	}
+}
 
-		if (identifyFieldByCursorPosition(game)->nOfPawns == 0)
-		{
-			game->cursorPositionY = game->board.fieldTable[currentField->index - 1].firstPositionY;
-		}
 
-		else
-		{
-			game->cursorPositionY = game->board.fieldTable[currentField->index - 1].firstPositionY + game->board.fieldTable[currentField->index - 1].nOfPawns - cursorPivot;
-		}
+void moveRightOnBottom(Game* game, Field* currentField, int cursorPivot)
+{
+	game->cursorPositionX = game->board.fieldTable[currentField->index - 1].positionX;
+
+	if (identifyFieldByCursorPosition(game)->nOfPawns == 0)
+	{
+		game->cursorPositionY = game->board.fieldTable[currentField->index - 1].firstPositionY;
+	}
+
+	else
+	{
+		game->cursorPositionY = game->board.fieldTable[currentField->index - 1].firstPositionY - game->board.fieldTable[currentField->index - 1].nOfPawns + cursorPivot;
+	}
+}
+
+
+void moveRightOnTop(Game* game, Field* currentField, int cursorPivot)
+{
+	game->cursorPositionX = game->board.fieldTable[currentField->index + 1].positionX;
+
+	if (identifyFieldByCursorPosition(game)->nOfPawns == 0)
+	{
+		game->cursorPositionY = game->board.fieldTable[currentField->index + 1].firstPositionY;
+	}
+
+	else
+	{
+		game->cursorPositionY = game->board.fieldTable[currentField->index + 1].firstPositionY + game->board.fieldTable[currentField->index + 1].nOfPawns - cursorPivot;
+	}
+}
+
+
+void moveRight(Game* game, Field* currentField, int cursorPivot)
+{
+	if (currentField->firstPositionY == BOTHORIZONTALBORDER - 1)
+	{
+		moveRightOnBottom(game, currentField, cursorPivot);
+	}
+
+	else if (currentField->firstPositionY == TOPHORIZONTALBORDER + 1)
+	{
+		moveRightOnTop(game, currentField, cursorPivot);
+	}
+}
+
+
+void moveUp(Game* game, Field* currentField, int cursorPivot)
+{
+	if (identifyFieldByCursorPosition(game)->nOfPawns == 0)
+	{
+		game->cursorPositionY = game->board.fieldTable[FIELDTABLESIZE - 1 - currentField->index].firstPositionY;
+	}
+
+	else
+	{
+		game->cursorPositionY = game->board.fieldTable[FIELDTABLESIZE - 1 - currentField->index].firstPositionY + game->board.fieldTable[FIELDTABLESIZE - 1 - currentField->index].nOfPawns - cursorPivot;
+	}
+	
+}
+
+
+void moveDown(Game* game, Field* currentField, int cursorPivot)
+{
+	if (identifyFieldByCursorPosition(game)->nOfPawns == 0)
+	{
+		game->cursorPositionY = game->board.fieldTable[FIELDTABLESIZE - 1 - currentField->index].firstPositionY;
+	}
+
+	else
+	{
+		game->cursorPositionY = game->board.fieldTable[FIELDTABLESIZE - 1 - currentField->index].firstPositionY - game->board.fieldTable[FIELDTABLESIZE - 1 - currentField->index].nOfPawns + cursorPivot;
 	}
 }
 
@@ -475,17 +609,15 @@ void moveLeft(Game* game, Field* currentField, int cursorPivot)
 // realizuje chodzenie po planszych po patykach
 void moveCursor(Game* game, MoveDirection moveDirection)
 {
-	CursorState cursorState = PICK_PAWN;
 	Field* currentField = identifyFieldByCursorPosition(game);
 	int cursorPivot = 0; // zapewnia odpowiednie przesunięcie kursora w PICKPAWN i PLACEPAWN
 
-	// zaimplementować cursorPivot zamiast - 1 lub + 1
-	if (cursorState == PICK_PAWN)
+	if (game->cursorState == PICK_PAWN)
 	{
 		cursorPivot = 1;
 	}
 
-	else if (cursorState == PLACE_PAWN)
+	else if (game->cursorState == PLACE_PAWN)
 	{
 		cursorPivot = 0;
 	}
@@ -498,25 +630,17 @@ void moveCursor(Game* game, MoveDirection moveDirection)
 
 	else if (moveDirection == RIGHT)
 	{
-		if (currentField->firstPositionY == BOTHORIZONTALBORDER - 1)
-		{
-			game->cursorPositionX = game->board.fieldTable[currentField->index - 1].positionX;
-		}
-
-		if (currentField->firstPositionY == TOPHORIZONTALBORDER + 1)
-		{
-			game->cursorPositionX = game->board.fieldTable[currentField->index + 1].positionX;
-		}
+		moveRight(game, currentField, cursorPivot);
 	}
 
 	else if (moveDirection == UP)
 	{
-		game->cursorPositionY = game->board.fieldTable[FIELDTABLESIZE - 1 - currentField->index].firstPositionY + currentField->nOfPawns - 1;
+		moveUp(game, currentField, cursorPivot);
 	}
 
 	else if (moveDirection == DOWN)
 	{
-		game->cursorPositionY = game->board.fieldTable[currentField->index].firstPositionY - currentField->nOfPawns + 1;
+		moveDown(game, currentField, cursorPivot);
 	}
 }
 
@@ -564,8 +688,8 @@ void saveGameToFile(Game* game)
 
 	fprintf(writeFile, "%d %d\n", game->dice1Value, game->dice2Value);
 	fprintf(writeFile, "%d %d\n", game->cursorPositionX, game->cursorPositionY);
-	fprintf(writeFile, "%s %s\n", game->whitePlayer->name, game->redPlayer->name);
-	fprintf(writeFile, "%s\n", game->whoseTurn->name);
+	fprintf(writeFile, "%s %s\n", game->whitePlayer.name, game->redPlayer.name);
+	fprintf(writeFile, "%d\n", game->whoseTurn);
 
 	fclose(writeFile);
 
@@ -623,8 +747,8 @@ void readGameFromFile(Game* game)
 	
 	fscanf(readFile, "%d%d", &game->dice1Value, &game->dice2Value);
 	fscanf(readFile, "%d%d", &game->cursorPositionX, &game->cursorPositionY);
-	fscanf(readFile, "%s%s", &game->whitePlayer->name, &game->redPlayer->name);
-	fscanf(readFile, "%s", &game->whoseTurn->name);
+	fscanf(readFile, "%s%s", game->whitePlayer.name, game->redPlayer.name);
+	fscanf(readFile, "%d", &game->whoseTurn);
 	
 	fclose(readFile);
 }
@@ -633,27 +757,35 @@ void readGameFromFile(Game* game)
 // ta funkcja zawierać będzie funkcje, które obsługują poruszanie się na planszy, klawisze wywołujące jakieś działanie
 // na początek chodzić będziemy CURSORCHARem, gra będzie trwała do momentu, aż sami jej nie wyłączymy - tzn.
 // nic nie będzie znikało dopóki nie wciśniemy np. 'q'.
-void gameFlow(Game* game)
+// TA FUNKCJA BEDZIE ZMIENIONA
+// zwraca czy kontynuować grę
+int cursorMovement(Game* game)
 {
 	//inicjalizacja początkowej pozycji kursora
-	game->cursorPositionX = game->board.fieldTable[0].positionX;
-	game->cursorPositionY = game->board.fieldTable[0].firstPositionY - game->board.fieldTable[0].nOfPawns;
-	
 	char charFromUser = '0';
 
 	_setcursortype(_NOCURSOR);
 
-	while (charFromUser != 'q')
+	while (charFromUser != 'q' && charFromUser != 10 && charFromUser != 13)
 	{
 		clrscr();
 
 		printBoard(game);
 
-		gotoxy(30, 1);
-		printf("x: %d, y: %d - index: %d", game->cursorPositionX, game->cursorPositionY, identifyFieldByCursorPosition(game)->index);
+		//gotoxy(30, 1);
+		//printf("x: %d, y: %d - index: %d", game->cursorPositionX, game->cursorPositionY, identifyFieldByCursorPosition(game)->index);
 
 		gotoxy(game->cursorPositionX, game->cursorPositionY);
-		putch(CURSORCHAR);
+
+		if (game->cursorState == PICK_PAWN)
+		{
+			putch(CURSORCHAR);
+		}
+
+		else if (game->cursorState == PLACE_PAWN)
+		{
+			putch(PAWNCHAR);
+		}
 
 		MoveDirection moveDirection = NONE;
 		charFromUser = getch();
@@ -676,6 +808,109 @@ void gameFlow(Game* game)
 			moveCursor(game, moveDirection);
 		}
 	}
+
+	if (charFromUser == 'q')
+	{
+		return 0;
+	}
+
+	else
+	{
+		return 1;
+	}
+}
+
+
+void captureEnemyPawn(Game* game)
+{
+	if (game->whoseTurn == WHITEPLAYER)
+	{
+		game->board.band.nOfRedPawns += 1;
+	}
+
+	else if (game->whoseTurn == REDPLAYER)
+	{
+		game->board.band.nOfWhitePawns += 1;
+	}
+}
+
+
+void movePawn(Game* game, int sourceFieldIndex, int destinationFieldIndex)
+{
+	if (game->board.fieldTable[sourceFieldIndex].nOfPawns > 0 && game->board.fieldTable[sourceFieldIndex].color == returnColorOfCurrentPlayer(game))
+	{
+		game->board.fieldTable[sourceFieldIndex].nOfPawns -= 1;
+	}
+
+	if (game->board.fieldTable[destinationFieldIndex].nOfPawns == 0)
+	{
+		game->board.fieldTable[destinationFieldIndex].nOfPawns = 1;
+		game->board.fieldTable[destinationFieldIndex].color = returnColorOfCurrentPlayer(game);
+	}
+
+	else if (game->board.fieldTable[destinationFieldIndex].color == returnColorOfCurrentPlayer(game))
+	{
+		game->board.fieldTable[destinationFieldIndex].nOfPawns += 1;
+	}
+
+	else if (game->board.fieldTable[destinationFieldIndex].nOfPawns == 1)
+	{
+		captureEnemyPawn(game);
+		game->board.fieldTable[destinationFieldIndex].nOfPawns = 1;
+		game->board.fieldTable[destinationFieldIndex].color = returnColorOfCurrentPlayer(game);
+	}
+
+	else
+	{
+		cputs("Nie mozna wykonac ruchu");
+	}
+}
+
+
+int makePlayerMove(Game* game)
+{
+	rollDices(game);
+	game->cursorState = PICK_PAWN;
+	int ifContinue = cursorMovement(game); //do wcisniecia entera
+
+	if (!ifContinue)
+	{
+		return 0;
+	}
+
+	int sourceFieldIndex = identifyFieldByCursorPosition(game)->index;
+
+	game->cursorState = PLACE_PAWN;
+
+	ifContinue = cursorMovement(game); //do wcisniecia entera
+
+	if (!ifContinue)
+	{
+		return 0;
+	}
+
+	int destinationFieldIndex = identifyFieldByCursorPosition(game)->index;
+	movePawn(game, sourceFieldIndex, destinationFieldIndex);
+	printBoard(game);
+
+	return 1;
+}
+
+
+// krok po kroku realizuje rozgrywkę
+void performGame(Game* game)
+{
+	int ifContinue = 1;
+
+	while (ifContinue)
+	{
+		ifContinue = makePlayerMove(game);
+
+		if (ifContinue)
+		{
+			changePlayerTurn(game); // kto wykonuje ruch bedzie widac po kolorze kursora
+		}
+	}
 }
 
 
@@ -684,13 +919,12 @@ int main()
 	Game game;
 	srand(time(0));
 	initGame(&game);
-	gameFlow(&game);
+	performGame(&game);
 	_setcursortype(_NORMALCURSOR);	
 	return 0;
 }
 
-//TODO: w funkcji initPawnPosition() są pozycje startowe pionków na danych polach, ale nie znamy współrzędnych tych pól.
-//TODO: czy współrzędna x dla pól powinna być z góry zdefiniowana?
-
-//TODO: Zrobić poruszanie po planszy
-//TODO: wszędzie gdzie są wspołrzędne kursora zamienić na game.cursorx albo y
+//TODO: sprawdzenie poruszania po planszy: ograniczenie na ruchy np. z górnych pól nie można pójść w górę itd.
+//TODO: naprawić kolory po kolei
+//TODO: wyświetlić wartość kostek
+//TODO: na zielono wyświetla się gdzie można postawić pionek
