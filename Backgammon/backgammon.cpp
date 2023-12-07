@@ -81,6 +81,13 @@ struct Board
 };
 
 
+struct PossibleMove
+{
+	int fieldIndex;
+	PossibleMove* next;
+};
+
+
 struct Player
 {
 	char name[MAXCHARLENGTH];
@@ -139,11 +146,9 @@ int returnColorOfCurrentPlayer(Game* game)
 
 void printRollResult(Game* game)
 {
-	gotoxy(1, 1);
-	putch(game->dice1Value + '0');
-
-	gotoxy(1, 2);
-	putch(game->dice2Value + '0');
+	gotoxy(RIGHTVERTICALBORDER + 1, TOPHORIZONTALBORDER + 2);
+	textcolor(WHITE);
+	printf("First dice: %d, Second dice: %d", game->dice1Value, game->dice2Value);
 }
 
 
@@ -151,8 +156,6 @@ void rollDices(Game* game)
 {
 	game->dice1Value = (rand() % 6) + 1;
 	game->dice2Value = (rand() % 6) + 1;
-
-	//printRollResult(game);
 }
 
 
@@ -359,23 +362,6 @@ void initFields(Field fieldTable[FIELDTABLESIZE])
 }
 
 
-//funkcja sprawdza czy ruch nie wychodzi poza granice planszy
-int ifMoveOnBoard(int currentX, int currentY)
-{
-	if (currentX + 1 > RIGHTVERTICALBORDER || currentX - 1 < LEFTVERTIVALBORDER)
-	{
-		return 0;
-	}
-
-	if (currentY + 1 > BOTHORIZONTALBORDER || currentY - 1 < TOPHORIZONTALBORDER)
-	{
-		return 0;
-	}
-
-	return 1;
-}
-
-
 //funkcja stworzona by nie powielać kodu
 void drawSinglePawn(Game* game, int currentX, int currentY, int playerColor)
 {
@@ -417,55 +403,13 @@ void drawPawnsOnFields(Game* game)
 }
 
 
-void printBoard(Game* game)
+void printGame(Game* game)
 {
 	textcolor(WHITE);
 	drawBoardBoundaries(&game->board);
 	drawPawnsOnFields(game);
 	printBand(game->board.band);
-}
-
-
-// ta funkcja nie wiem po co jest i piszę jakby jej nie było - nie jest używana
-int pickField(Game game)
-{
-	int cursorX = RIGHTVERTICALBORDER / 2;
-	int cursorY = BOTHORIZONTALBORDER / 2;
-	int textColor = CYAN;
-	char charFromUser;
-
-	gotoxy(cursorX, cursorY);
-	textcolor(textColor);
-
-	putch(CURSORCHAR);
-	charFromUser = getch();
-
-	while (charFromUser != 0x0d)
-	{
-		if (charFromUser == 0) {
-			charFromUser = getch();
-			if (charFromUser == 0x48) cursorY--;
-			else if (charFromUser == 0x50) cursorY++;
-			else if (charFromUser == 0x4b) cursorX--;
-			else if (charFromUser == 0x4d) cursorX++;
-		}
-
-		textbackground(BLACK);
-		clrscr();
-		gotoxy(cursorX, cursorY);
-		putch(CURSORCHAR);
-		charFromUser = getch();
-	}
-
-	textbackground(BLACK);
-	textcolor(RED);
-	clrscr();
-	gotoxy(cursorX, cursorY);
-	putch(CURSORCHAR);
-	putch(cursorX + '0');
-	putch(cursorY + '0');
-
-	return 0;
+	printRollResult(game);
 }
 
 
@@ -606,11 +550,38 @@ void moveDown(Game* game, Field* currentField, int cursorPivot)
 }
 
 
+int ifWrongMoveDirection(Game* game, MoveDirection moveDirection)
+{
+	if ((identifyFieldByCursorPosition(game)->firstPositionY == BOTHORIZONTALBORDER - 1 && moveDirection == DOWN) ||
+		(identifyFieldByCursorPosition(game)->firstPositionY == TOPHORIZONTALBORDER + 1 && moveDirection == UP))
+	{
+		return 1;
+	}
+
+	else if (moveDirection == LEFT && (identifyFieldByCursorPosition(game)->index == 11 || identifyFieldByCursorPosition(game)->index == 12))
+	{
+		return 1;
+	}
+
+	else if (moveDirection == RIGHT && (identifyFieldByCursorPosition(game)->index == 0 || identifyFieldByCursorPosition(game)->index == 23))
+	{
+		return 1;
+	}
+
+	return 0;
+}
+
+
 // realizuje chodzenie po planszych po patykach
 void moveCursor(Game* game, MoveDirection moveDirection)
 {
 	Field* currentField = identifyFieldByCursorPosition(game);
 	int cursorPivot = 0; // zapewnia odpowiednie przesunięcie kursora w PICKPAWN i PLACEPAWN
+
+	if (ifWrongMoveDirection(game, moveDirection))
+	{
+		return;
+	}
 
 	if (game->cursorState == PICK_PAWN)
 	{
@@ -763,19 +734,21 @@ int cursorMovement(Game* game)
 {
 	//inicjalizacja początkowej pozycji kursora
 	char charFromUser = '0';
-
+	PossibleMove* possibleMove;
 	_setcursortype(_NOCURSOR);
 
 	while (charFromUser != 'q' && charFromUser != 10 && charFromUser != 13)
 	{
 		clrscr();
 
-		printBoard(game);
+		printGame(game);
 
-		//gotoxy(30, 1);
+		//gotoxy(30, 4);
+		//textcolor(WHITE);
 		//printf("x: %d, y: %d - index: %d", game->cursorPositionX, game->cursorPositionY, identifyFieldByCursorPosition(game)->index);
 
 		gotoxy(game->cursorPositionX, game->cursorPositionY);
+		textcolor(returnColorOfCurrentPlayer(game));
 
 		if (game->cursorState == PICK_PAWN)
 		{
@@ -867,9 +840,53 @@ void movePawn(Game* game, int sourceFieldIndex, int destinationFieldIndex)
 }
 
 
+// ta funkcja będzie rozpoznawać, że gracz biały może ruszyć się na mniejsze indeksy, gracz czerwony na większe
+void addPossibleMove(Game* game)
+{
+	PossibleMove* possibleMove = (PossibleMove*)malloc(sizeof(PossibleMove));
+	possibleMove->fieldIndex = 2; // tymczasowo
+	possibleMove->next = NULL;
+}
+
+
+// usuwa ruch z listy możliwych ruchów - został on zweryfikowany jako niemożliwy
+void removeMove()
+{
+
+}
+
+
+void verifyPossibleMoves(Game* game, PossibleMove* possibleMove)
+{
+	while (possibleMove != NULL)
+	{
+		// używać struct PlayerMove
+		// if (playerMove.desinationField.nOfPawns > 1 || inny kolor pionka na destinationField)
+		// { removeMove(); }
+
+		possibleMove->next;
+	}
+}
+
+
+void displayPossibleMoves(Game* game, PossibleMove* possibleMove)
+{
+	while (possibleMove != NULL)
+	{
+
+
+		possibleMove->next;
+	}
+}
+
+
+
 int makePlayerMove(Game* game)
 {
 	rollDices(game);
+	// addPossibleMove(); // dodaje do listy jednokierunkowej pola, które są w odległości dice1, dice2 od indexu na którym znajduje sie kursor
+	// verifyPossibleMoves(game, possibleMove);
+	// displayPossibleMoves(game, possibleMove); // jeśli można bić to trzeba bić - podkreśla na zielono możliwe pola po weryfikacji
 	game->cursorState = PICK_PAWN;
 	int ifContinue = cursorMovement(game); //do wcisniecia entera
 
@@ -882,7 +899,7 @@ int makePlayerMove(Game* game)
 
 	game->cursorState = PLACE_PAWN;
 
-	ifContinue = cursorMovement(game); //do wcisniecia entera
+	ifContinue = cursorMovement(game); // do wcisniecia entera
 
 	if (!ifContinue)
 	{
@@ -891,7 +908,7 @@ int makePlayerMove(Game* game)
 
 	int destinationFieldIndex = identifyFieldByCursorPosition(game)->index;
 	movePawn(game, sourceFieldIndex, destinationFieldIndex);
-	printBoard(game);
+	printGame(game);
 
 	return 1;
 }
@@ -924,7 +941,9 @@ int main()
 	return 0;
 }
 
-//TODO: sprawdzenie poruszania po planszy: ograniczenie na ruchy np. z górnych pól nie można pójść w górę itd.
 //TODO: naprawić kolory po kolei
-//TODO: wyświetlić wartość kostek
+//TODO: dopracować kursory - biały może podnieść tylko białego pionka itd
 //TODO: na zielono wyświetla się gdzie można postawić pionek
+//TODO: zrobic liste jednokierunkowa mozliwych ruchow
+//TODO: postępowanie w razie dubletu
+//TODO: użyć struktury PlayerMove
