@@ -73,6 +73,12 @@ struct Court
 };
 
 
+struct PlayerMove
+{
+	Field* sourceField;
+	Field* destinationField;
+};
+
 struct Board
 {
 	Band band;
@@ -83,7 +89,7 @@ struct Board
 
 struct PossibleMove
 {
-	int fieldIndex;
+	PlayerMove playerMove;
 	PossibleMove* next;
 };
 
@@ -109,11 +115,17 @@ struct Game
 };
 
 
-struct PlayerMove
-{
-	Field* sourceField;
-	Field* destinationField;
-};
+PossibleMove* createNode(PlayerMove move) {
+	PossibleMove* newNode = (PossibleMove*)malloc(sizeof(PossibleMove));
+	if (newNode == NULL) 
+	{
+		exit(EXIT_FAILURE);
+	}
+
+	newNode->playerMove = move;
+	newNode->next = NULL;
+	return newNode;
+}
 
 
 void printBand(Band band)
@@ -725,6 +737,29 @@ void readGameFromFile(Game* game)
 }
 
 
+int ifOwnPawnPicked(Game* game)
+{
+
+
+	return 0;
+}
+
+
+void changeCursorChar(Game* game)
+{
+	if (game->cursorState == PICK_PAWN)
+	{
+		putch(CURSORCHAR);
+	}
+
+	else if (game->cursorState == PLACE_PAWN)
+	{
+		putch(PAWNCHAR);
+	}
+}
+
+
+
 // ta funkcja zawierać będzie funkcje, które obsługują poruszanie się na planszy, klawisze wywołujące jakieś działanie
 // na początek chodzić będziemy CURSORCHARem, gra będzie trwała do momentu, aż sami jej nie wyłączymy - tzn.
 // nic nie będzie znikało dopóki nie wciśniemy np. 'q'.
@@ -749,16 +784,7 @@ int cursorMovement(Game* game)
 
 		gotoxy(game->cursorPositionX, game->cursorPositionY);
 		textcolor(returnColorOfCurrentPlayer(game));
-
-		if (game->cursorState == PICK_PAWN)
-		{
-			putch(CURSORCHAR);
-		}
-
-		else if (game->cursorState == PLACE_PAWN)
-		{
-			putch(PAWNCHAR);
-		}
+		changeCursorChar(game);
 
 		MoveDirection moveDirection = NONE;
 		charFromUser = getch();
@@ -840,12 +866,43 @@ void movePawn(Game* game, PlayerMove playerMove)
 }
 
 
-// ta funkcja będzie rozpoznawać, że gracz biały może ruszyć się na mniejsze indeksy, gracz czerwony na większe
-void addPossibleMove(Game* game)
+void addMoveToList(PossibleMove** head, PlayerMove move)
 {
-	PossibleMove* possibleMove = (PossibleMove*)malloc(sizeof(PossibleMove));
-	possibleMove->fieldIndex = 2; // tymczasowo
-	possibleMove->next = NULL;
+	PossibleMove* newNode = createNode(move);
+
+	if (*head == NULL)
+	{
+		*head = newNode;
+	}
+
+	else
+	{
+		PossibleMove* current = *head;
+		while (current->next != NULL) {
+			current = current->next;
+		}
+		current->next = newNode;
+	}
+}
+
+
+// ta funkcja będzie rozpoznawać, że gracz biały może ruszyć się na mniejsze indeksy, gracz czerwony na większe
+void addPossibleMove(PlayerMove playerMove, int nOfPossibleMoves, Game* game)
+{
+	for (int i = 0; i < nOfPossibleMoves; i++)
+	{
+		if (game->whoseTurn == WHITEPLAYER) // biały zmniejsza indeksy
+		{
+			
+		}
+
+		else if (game->whoseTurn == REDPLAYER) //zwiększa indeksy dla czerwonego
+		{
+
+		}
+
+		addToPossibleMoveList();
+	}
 }
 
 
@@ -879,15 +936,27 @@ void displayPossibleMoves(Game* game, PossibleMove* possibleMove)
 	}
 }
 
+// ile maksymalnie pól się podświetli
+int numberOfPossibleDestination(Game* game)
+{
+	if (game->dice1Value == game->dice2Value)
+	{
+		return 4;
+	}
+
+	return 3;
+}
 
 
 int makePlayerMove(Game* game)
 {
 	PlayerMove playerMove;
 	rollDices(game);
-	// addPossibleMove(); // dodaje do listy jednokierunkowej pola, które są w odległości dice1, dice2 od indexu na którym znajduje sie kursor
+	int nOfPossibleDest = numberOfPossibleDestination(game);
+	addPossibleMove(); // dodaje do listy jednokierunkowej pola, które są w odległości dice1, dice2 od indexu na którym znajduje sie kursor
 	// verifyPossibleMoves(game, possibleMove);
 	// displayPossibleMoves(game, possibleMove); // jeśli można bić to trzeba bić - podkreśla na zielono możliwe pola po weryfikacji
+
 	game->cursorState = PICK_PAWN;
 	int ifContinue = cursorMovement(game); //do wcisniecia entera
 
@@ -897,7 +966,6 @@ int makePlayerMove(Game* game)
 	}
 
 	playerMove.sourceField = identifyFieldByCursorPosition(game);
-
 	game->cursorState = PLACE_PAWN;
 
 	ifContinue = cursorMovement(game); // do wcisniecia entera
@@ -948,3 +1016,14 @@ int main()
 //TODO: zrobic liste jednokierunkowa mozliwych ruchow
 //TODO: postępowanie w razie dubletu
 //TODO: użyć struktury PlayerMove
+//TODO: jeżeli jesteśmy w pick_pawn to po najechaniu na pole pojawiają nam się możliwe ruchy i wtedy możemy podnieść pionek
+//TODO: gracz idzie na podświetlone pole, jeśli jest ono w liście jednokierunkowej possibleMoves to ruch zostaje zatwierdzony
+//TODO: wprowadzanie pionków do bazy: zmienić status np. gameState i wtedy pionki mogą przekraczać 23 indeks w ruchu
+
+/*
+*  Jest lista możliwych ruchów, zawiera ona ruchy nieprzekraczające 23 indeksu. Szukamy na liście ruchów, które są aktualnie możliwe.
+*  Jeśli jakiś ruch na początku nie jest możliwy przez np. pionki przeciwnika to szukamy kolejnego ale go nie usuwamy. Usuwamy ruch z listy po jego wykonaniu.
+*  Wyrzucam 3 i 5. Nie mogę iść na source+5 bo są tam pionki, mogę iść source+3 - program wybiera ruch source+3 i usuwa go z listy. Z pola source+3 mogę wykonać ruch
+*  +5, który pozostał na liście.
+*  WAŻNE: 3+5 daje 8, ale jeśli na polu source+3 i source+5 są pionki przeciwnika, to nie mogę sie ruszyć o 8.
+*/
