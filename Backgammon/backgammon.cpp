@@ -111,8 +111,8 @@ struct Game
 
 struct PlayerMove
 {
-	int startFieldIndex;
-	int endFieldIndex;
+	Field* sourceField;
+	Field* destinationField;
 };
 
 
@@ -808,29 +808,29 @@ void captureEnemyPawn(Game* game)
 }
 
 
-void movePawn(Game* game, int sourceFieldIndex, int destinationFieldIndex)
+void movePawn(Game* game, PlayerMove playerMove)
 {
-	if (game->board.fieldTable[sourceFieldIndex].nOfPawns > 0 && game->board.fieldTable[sourceFieldIndex].color == returnColorOfCurrentPlayer(game))
+	if (playerMove.sourceField->nOfPawns > 0 && playerMove.sourceField->color == returnColorOfCurrentPlayer(game))
 	{
-		game->board.fieldTable[sourceFieldIndex].nOfPawns -= 1;
+		playerMove.sourceField->nOfPawns -= 1;
 	}
 
-	if (game->board.fieldTable[destinationFieldIndex].nOfPawns == 0)
+	if (playerMove.destinationField->nOfPawns == 0)
 	{
-		game->board.fieldTable[destinationFieldIndex].nOfPawns = 1;
-		game->board.fieldTable[destinationFieldIndex].color = returnColorOfCurrentPlayer(game);
+		playerMove.destinationField->nOfPawns = 1;
+		playerMove.destinationField->color = returnColorOfCurrentPlayer(game);
 	}
 
-	else if (game->board.fieldTable[destinationFieldIndex].color == returnColorOfCurrentPlayer(game))
+	else if (playerMove.destinationField->color == returnColorOfCurrentPlayer(game))
 	{
-		game->board.fieldTable[destinationFieldIndex].nOfPawns += 1;
+		playerMove.destinationField->nOfPawns += 1;
 	}
 
-	else if (game->board.fieldTable[destinationFieldIndex].nOfPawns == 1)
+	else if (playerMove.destinationField->nOfPawns == 1)
 	{
 		captureEnemyPawn(game);
-		game->board.fieldTable[destinationFieldIndex].nOfPawns = 1;
-		game->board.fieldTable[destinationFieldIndex].color = returnColorOfCurrentPlayer(game);
+		playerMove.destinationField->nOfPawns = 1;
+		playerMove.destinationField->color = returnColorOfCurrentPlayer(game);
 	}
 
 	else
@@ -883,6 +883,7 @@ void displayPossibleMoves(Game* game, PossibleMove* possibleMove)
 
 int makePlayerMove(Game* game)
 {
+	PlayerMove playerMove;
 	rollDices(game);
 	// addPossibleMove(); // dodaje do listy jednokierunkowej pola, które są w odległości dice1, dice2 od indexu na którym znajduje sie kursor
 	// verifyPossibleMoves(game, possibleMove);
@@ -895,7 +896,7 @@ int makePlayerMove(Game* game)
 		return 0;
 	}
 
-	int sourceFieldIndex = identifyFieldByCursorPosition(game)->index;
+	playerMove.sourceField = identifyFieldByCursorPosition(game);
 
 	game->cursorState = PLACE_PAWN;
 
@@ -906,8 +907,8 @@ int makePlayerMove(Game* game)
 		return 0;
 	}
 
-	int destinationFieldIndex = identifyFieldByCursorPosition(game)->index;
-	movePawn(game, sourceFieldIndex, destinationFieldIndex);
+	playerMove.destinationField = identifyFieldByCursorPosition(game);
+	movePawn(game, playerMove);
 	printGame(game);
 
 	return 1;
