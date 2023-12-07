@@ -1032,12 +1032,9 @@ int main()
 	return 0;
 }
 
-//TODO: naprawić kolory po kolei
-//TODO: dopracować kursory - biały może podnieść tylko białego pionka itd
 //TODO: na zielono wyświetla się gdzie można postawić pionek
 //TODO: zrobic liste jednokierunkowa mozliwych ruchow
 //TODO: postępowanie w razie dubletu
-//TODO: użyć struktury PlayerMove
 //TODO: jeżeli jesteśmy w pick_pawn to po najechaniu na pole pojawiają nam się możliwe ruchy i wtedy możemy podnieść pionek
 //TODO: gracz idzie na podświetlone pole, jeśli jest ono w liście jednokierunkowej possibleMoves to ruch zostaje zatwierdzony
 //TODO: wprowadzanie pionków do bazy: zmienić status np. gameState i wtedy pionki mogą przekraczać 23 indeks w ruchu
