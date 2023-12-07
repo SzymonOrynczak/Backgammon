@@ -115,16 +115,11 @@ struct Game
 };
 
 
-PossibleMove* createNode(PlayerMove move) {
-	PossibleMove* newNode = (PossibleMove*)malloc(sizeof(PossibleMove));
-	if (newNode == NULL) 
-	{
-		exit(EXIT_FAILURE);
-	}
 
-	newNode->playerMove = move;
-	newNode->next = NULL;
-	return newNode;
+
+PossibleMove* createPossibleMove(PlayerMove move)
+{
+	return NULL;
 }
 
 
@@ -737,9 +732,12 @@ void readGameFromFile(Game* game)
 }
 
 
-int ifOwnPawnPicked(Game* game)
+int ifOwnPawnPicked(Game* game, Field* sourceField)
 {
-
+	if (sourceField->color == returnColorOfCurrentPlayer(game))
+	{
+		return 1;
+	}
 
 	return 0;
 }
@@ -865,43 +863,42 @@ void movePawn(Game* game, PlayerMove playerMove)
 	}
 }
 
-
-void addMoveToList(PossibleMove** head, PlayerMove move)
+// dodawanie do listy
+void addToPossibleMoveList(PossibleMove** head, PlayerMove move)
 {
-	PossibleMove* newNode = createNode(move);
 
-	if (*head == NULL)
-	{
-		*head = newNode;
-	}
+}
 
-	else
+
+
+void addNormalRollResult(PlayerMove playerMove, int nOfPossibleMoves, Game* game)
+{
+	int dicesSum = game->dice1Value + game->dice2Value;
+	
+}
+
+
+void addDoubleRollResult(PlayerMove playerMove, int nOfPossibleMoves, Game* game)
+{
+	for (int i = 0; i < game->dice1Value; i++)
 	{
-		PossibleMove* current = *head;
-		while (current->next != NULL) {
-			current = current->next;
-		}
-		current->next = newNode;
+		//dodaj do listy jako index: dice*1, dice*2, dice*3, dice*4
 	}
 }
 
 
 // ta funkcja będzie rozpoznawać, że gracz biały może ruszyć się na mniejsze indeksy, gracz czerwony na większe
+// dodanie sourceField.index + dice1/dice2/suma
 void addPossibleMove(PlayerMove playerMove, int nOfPossibleMoves, Game* game)
 {
-	for (int i = 0; i < nOfPossibleMoves; i++)
+	if (nOfPossibleMoves == 3)
 	{
-		if (game->whoseTurn == WHITEPLAYER) // biały zmniejsza indeksy
-		{
-			
-		}
+		addNormalRollResult(playerMove, nOfPossibleMoves, game);
+	}
 
-		else if (game->whoseTurn == REDPLAYER) //zwiększa indeksy dla czerwonego
-		{
-
-		}
-
-		addToPossibleMoveList();
+	else if (nOfPossibleMoves == 4)
+	{
+		addDoubleRollResult(playerMove, nOfPossibleMoves, game);
 	}
 }
 
@@ -912,7 +909,7 @@ void removeMove()
 
 }
 
-
+// sprawdza czy index jest <= 23, czy na destField są enemy pionki itd
 void verifyPossibleMoves(Game* game, PossibleMove* possibleMove)
 {
 	while (possibleMove != NULL)
@@ -936,7 +933,7 @@ void displayPossibleMoves(Game* game, PossibleMove* possibleMove)
 	}
 }
 
-// ile maksymalnie pól się podświetli
+//tutaj jest duzo więcej możliwości
 int numberOfPossibleDestination(Game* game)
 {
 	if (game->dice1Value == game->dice2Value)
@@ -948,12 +945,23 @@ int numberOfPossibleDestination(Game* game)
 }
 
 
+int ifPawnCursorMoved(Game* game, PlayerMove playerMove)
+{
+	if (playerMove.sourceField->index == playerMove.destinationField->index)
+	{
+		return 0;
+	}
+
+	return 1;
+}
+
+
 int makePlayerMove(Game* game)
 {
 	PlayerMove playerMove;
 	rollDices(game);
 	int nOfPossibleDest = numberOfPossibleDestination(game);
-	addPossibleMove(); // dodaje do listy jednokierunkowej pola, które są w odległości dice1, dice2 od indexu na którym znajduje sie kursor
+	// addPossibleMove(nOfPossibleMoves); // dodaje do listy jednokierunkowej pola, które są w odległości dice1, dice2 od indexu na którym znajduje sie kursor
 	// verifyPossibleMoves(game, possibleMove);
 	// displayPossibleMoves(game, possibleMove); // jeśli można bić to trzeba bić - podkreśla na zielono możliwe pola po weryfikacji
 
@@ -966,16 +974,30 @@ int makePlayerMove(Game* game)
 	}
 
 	playerMove.sourceField = identifyFieldByCursorPosition(game);
+
+	while (!ifOwnPawnPicked(game, playerMove.sourceField))
+	{
+		ifContinue = cursorMovement(game);
+		playerMove.sourceField = identifyFieldByCursorPosition(game);
+	}
+
 	game->cursorState = PLACE_PAWN;
 
 	ifContinue = cursorMovement(game); // do wcisniecia entera
+
+	playerMove.destinationField = identifyFieldByCursorPosition(game);
+
+	while (!ifPawnCursorMoved(game, playerMove))
+	{
+		ifContinue = cursorMovement(game); // do wcisniecia entera
+		playerMove.destinationField = identifyFieldByCursorPosition(game);
+	}
 
 	if (!ifContinue)
 	{
 		return 0;
 	}
 
-	playerMove.destinationField = identifyFieldByCursorPosition(game);
 	movePawn(game, playerMove);
 	printGame(game);
 
