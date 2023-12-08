@@ -778,7 +778,7 @@ int ifOwnPawnPicked(Game* game, Field* sourceField)
 }
 
 
-void changeCursorChar(Game* game)
+void setProperCursorChar(Game* game)
 {
 	if (game->cursorState == PICK_PAWN)
 	{
@@ -793,62 +793,27 @@ void changeCursorChar(Game* game)
 
 
 
-// ta funkcja zawierać będzie funkcje, które obsługują poruszanie się na planszy, klawisze wywołujące jakieś działanie
-// na początek chodzić będziemy CURSORCHARem, gra będzie trwała do momentu, aż sami jej nie wyłączymy - tzn.
-// nic nie będzie znikało dopóki nie wciśniemy np. 'q'.
-// TA FUNKCJA BEDZIE ZMIENIONA
-// zwraca czy kontynuować grę
-int cursorMovement(Game* game)
+
+// jeśli najedziemy na pionek w state == PICK_PAWN to na zielono podświetlą sie wszystkie możliwe destinationField z listy jednokierunkowej
+// czyli: clrscr(), printGame i displayPossibleMoves
+// dodatkowo jeśli podniesiemy pionek to pola wciąż powinny świecić się na zielono
+void displayPossibleMoves(Game* game, PossibleMove* possibleMoveHead)
 {
-	//inicjalizacja początkowej pozycji kursora
-	char charFromUser = '0';
-	PossibleMove* possibleMove;
-	_setcursortype(_NOCURSOR);
+	clrscr();
+	printGame(game);
 
-	while (charFromUser != 'q' && charFromUser != 10 && charFromUser != 13)
+	gotoxy(30, 10);
+	printf("here");
+
+	PossibleMove* current = possibleMoveHead;
+
+	while (current != NULL)
 	{
-		clrscr();
-
-		printGame(game);
-
-		//gotoxy(30, 4);
-		//textcolor(WHITE);
-		//printf("x: %d, y: %d - index: %d", game->cursorPositionX, game->cursorPositionY, identifyFieldByCursorPosition(game)->index);
-
-		gotoxy(game->cursorPositionX, game->cursorPositionY);
-		textcolor(returnColorOfCurrentPlayer(game));
-		changeCursorChar(game);
-
-		MoveDirection moveDirection = NONE;
-		charFromUser = getch();
-
-		if (charFromUser == 0)
-		{
-			charFromUser = getch();
-
-			if (charFromUser == 0x48) moveDirection = UP;
-			else if (charFromUser == 0x50) moveDirection = DOWN;
-			else if (charFromUser == 0x4b) moveDirection = LEFT;
-			else if (charFromUser == 0x4d) moveDirection = RIGHT;
-		}
-
-		else if (charFromUser == 's') saveGameToFile(game);
-		else if (charFromUser == 'r') readGameFromFile(game);
-
-		if (moveDirection != NONE)
-		{
-			moveCursor(game, moveDirection);
-		}
-	}
-
-	if (charFromUser == 'q')
-	{
-		return 0;
-	}
-
-	else
-	{
-		return 1;
+		//gotoxy dla dołu póki co
+		gotoxy(current->playerMove.destinationField->positionX, current->playerMove.destinationField->firstPositionY - current->playerMove.destinationField->nOfPawns);
+		textcolor(GREEN);
+		putch('o');
+		current = current->next;
 	}
 }
 
@@ -905,7 +870,9 @@ void freeList(PossibleMove* head)
 {
 	PossibleMove* current = head;
 	PossibleMove* next;
-	while (current != NULL) {
+
+	while (current != NULL)
+	{
 		next = current->next;
 		free(current);
 		current = next;
@@ -917,10 +884,13 @@ void freeList(PossibleMove* head)
 void addPossibleMoveToList(PossibleMove** head, PlayerMove move)
 {
 	PossibleMove* newNode = createPossibleMove(move);
-	if (*head == NULL) {
+	if (*head == NULL)
+	{
 		*head = newNode;
 	}
-	else {
+
+	else
+	{
 		PossibleMove* current = *head;
 		while (current->next != NULL) {
 			current = current->next;
@@ -935,6 +905,7 @@ void addNormalRollResult(Game* game, PossibleMove** head, Field* currentField)
 {
 	int dicesSum = game->dice1Value + game->dice2Value;
 
+	// od razu musi być sprawdzenie czy index destinationField jest < 23 ponieważ może wyrzucić błąd
 	PlayerMove move1 = { currentField, &game->board.fieldTable[currentField->index + dicesSum] };
 	PlayerMove move2 = { currentField, &game->board.fieldTable[currentField->index + game->dice1Value] };
 	PlayerMove move3 = { currentField, &game->board.fieldTable[currentField->index + game->dice2Value] };
@@ -960,55 +931,70 @@ void addDoubleRollResult(Game* game, PossibleMove** head, Field* currentField)
 
 // ta funkcja będzie rozpoznawać, że gracz biały może ruszyć się na mniejsze indeksy, gracz czerwony na większe
 // dodanie sourceField.index + dice1/dice2/suma
-void addPossibleMove(int nOfPossibleMoves, Game* game)
+void addPossibleMoves(int nOfPossibleMoves, Game* game, PossibleMove** moveHead)
 {
-	PossibleMove* moveHead = NULL;
 	Field* currentField = identifyFieldByCursorPosition(game);
 
 	if (nOfPossibleMoves == 3)
 	{
-		addNormalRollResult(game, &moveHead, currentField);
+		addNormalRollResult(game, moveHead, currentField);
 	}
 
 	else if (nOfPossibleMoves == 4)
 	{
-		addDoubleRollResult(game, &moveHead, currentField);
+		addDoubleRollResult(game, moveHead, currentField);
 	}
 }
 
 
 // usuwa ruch z listy możliwych ruchów - został on zweryfikowany jako niemożliwy
-void removeMoveFromList(PossibleMove** head, PlayerMove move)
+void removeMoveFromList(PossibleMove** head, PlayerMove moveToRemove)
 {
+	PossibleMove* current = *head;
+	PossibleMove* previous = NULL;
 
+	// Szukanie elementu do usunięcia
+	while (current != NULL && (current->playerMove.destinationField == moveToRemove.destinationField && current->playerMove.sourceField == moveToRemove.sourceField))
+	{
+		previous = current;
+		current = current->next;
+	}
+
+	// Jeśli element został znaleziony
+	if (current != NULL)
+	{
+		// Jeśli to pierwszy element listy
+		if (previous == NULL)
+		{
+			*head = current->next;
+		}
+		else
+		{
+			previous->next = current->next;
+		}
+
+		// Zwolnienie pamięci zajmowanej przez usuwany element
+		free(current);
+	}
 }
 
 // sprawdza czy index jest <= 23, czy na destField są enemy pionki itd
-void verifyPossibleMoves(Game* game, PossibleMove* possibleMove)
+// ta funkcja powinna sprawdzac więcej rzeczy ale to wymaga zmian w movePawn()
+void verifyPossibleMoves(Game* game, PossibleMove* possibleMoveHead)
 {
-	while (possibleMove != NULL)
-	{
-		// używać struct PlayerMove
-		// if (playerMove.desinationField.nOfPawns > 1 || inny kolor pionka na destinationField)
-		// { removeMove(); }
+	PossibleMove* current = possibleMoveHead;
 
-		possibleMove->next;
+	while (current != NULL)
+	{
+		if (current->playerMove.destinationField->index > (FIELDTABLESIZE - 1))
+		{
+			removeMoveFromList(&possibleMoveHead, current->playerMove);
+		}
+
+		current = current->next;
 	}
 }
 
-
-// jeśli najedziemy na pionek w state == PICK_PAWN to na zielono podświetlą sie wszystkie możliwe destinationField z listy jednokierunkowej
-// czyli: clrscr(), printGame i displayPossibleMoves
-// dodatkowo jeśli podniesiemy pionek to pola wciąż powinny świecić się na zielono
-void displayPossibleMoves(Game* game, PossibleMove* possibleMove)
-{
-	while (possibleMove != NULL)
-	{
-
-
-		possibleMove->next;
-	}
-}
 
 //tutaj jest duzo więcej możliwości
 int numberOfPossibleDestination(Game* game)
@@ -1033,17 +1019,89 @@ int ifPawnCursorMoved(Game* game, PlayerMove playerMove)
 }
 
 
+
+int ifCursorOnOwnPawn(Game* game)
+{
+	Field* currentField = identifyFieldByCursorPosition(game);
+
+	if (game->cursorState == PICK_PAWN || currentField->nOfPawns > 0 || currentField->color == game->whoseTurn)
+	{
+		return 1;
+	}
+
+	return 0;
+}
+
+
+// TA FUNKCJA BEDZIE ZMIENIONA
+// zwraca czy kontynuować grę
+int cursorMovement(Game* game, PossibleMove* moveHead, int nOfPossibleDest)
+{
+	char charFromUser = '0';
+	_setcursortype(_NOCURSOR);
+
+	while (charFromUser != 'q' && charFromUser != 10 && charFromUser != 13)
+	{
+		clrscr();
+		printGame(game);
+		freeList(moveHead);
+
+		if (ifCursorOnOwnPawn(game))
+		{
+			addPossibleMoves(nOfPossibleDest, game, &moveHead); // dodaje do listy jednokierunkowej pola, które są w odległości dice1, dice2 od indexu na którym znajduje sie kursor
+			verifyPossibleMoves(game, moveHead);
+			displayPossibleMoves(game, moveHead);
+		}
+		
+		gotoxy(game->cursorPositionX, game->cursorPositionY);
+		textcolor(returnColorOfCurrentPlayer(game));
+		setProperCursorChar(game);
+
+		MoveDirection moveDirection = NONE;
+		charFromUser = getch();
+
+		if (charFromUser == 0)
+		{
+			charFromUser = getch();
+
+			if (charFromUser == 0x48) moveDirection = UP;
+			else if (charFromUser == 0x50) moveDirection = DOWN;
+			else if (charFromUser == 0x4b) moveDirection = LEFT;
+			else if (charFromUser == 0x4d) moveDirection = RIGHT;
+		}
+
+		else if (charFromUser == 's') saveGameToFile(game);
+		else if (charFromUser == 'r') readGameFromFile(game);
+
+		if (moveDirection != NONE)
+		{
+			moveCursor(game, moveDirection);
+		}
+	}
+
+	if (charFromUser == 'q')
+	{
+		return 0;
+	}
+
+	else
+	{
+		return 1;
+	}
+}
+
+
 int makePlayerMove(Game* game)
 {
+	game->cursorState = PICK_PAWN;
+
 	PlayerMove playerMove;
+	PossibleMove* moveHead = NULL;
+
 	rollDices(game);
 	int nOfPossibleDest = numberOfPossibleDestination(game);
-	addPossibleMove(nOfPossibleDest, game); // dodaje do listy jednokierunkowej pola, które są w odległości dice1, dice2 od indexu na którym znajduje sie kursor
-	// verifyPossibleMoves(game, possibleMove);
-	// displayPossibleMoves(game, possibleMove); // jeśli można bić to trzeba bić - podkreśla na zielono możliwe pola po weryfikacji
 
-	game->cursorState = PICK_PAWN;
-	int ifContinue = cursorMovement(game); //do wcisniecia entera
+	int ifContinue = cursorMovement(game, moveHead, nOfPossibleDest); //do wcisniecia entera
 
 	if (!ifContinue)
 	{
@@ -1054,19 +1112,19 @@ int makePlayerMove(Game* game)
 
 	while (!ifOwnPawnPicked(game, playerMove.sourceField))
 	{
-		ifContinue = cursorMovement(game);
+		ifContinue = cursorMovement(game, moveHead, nOfPossibleDest);
 		playerMove.sourceField = identifyFieldByCursorPosition(game);
 	}
 
 	game->cursorState = PLACE_PAWN;
 
-	ifContinue = cursorMovement(game); // do wcisniecia entera
+	ifContinue = cursorMovement(game, moveHead, nOfPossibleDest); // do wcisniecia entera
 
 	playerMove.destinationField = identifyFieldByCursorPosition(game);
 
 	while (!ifPawnCursorMoved(game, playerMove))
 	{
-		ifContinue = cursorMovement(game); // do wcisniecia entera
+		ifContinue = cursorMovement(game, moveHead, nOfPossibleDest); // do wcisniecia entera
 		playerMove.destinationField = identifyFieldByCursorPosition(game);
 	}
 
@@ -1076,7 +1134,6 @@ int makePlayerMove(Game* game)
 	}
 
 	movePawn(game, playerMove);
-	printGame(game);
 
 	return 1;
 }
@@ -1126,4 +1183,9 @@ int main()
 *  Wyrzucam 3 i 5. Nie mogę iść na source+5 bo są tam pionki, mogę iść source+3 - program wybiera ruch source+3 i usuwa go z listy. Z pola source+3 mogę wykonać ruch
 *  +5, który pozostał na liście.
 *  WAŻNE: 3+5 daje 8, ale jeśli na polu source+3 i source+5 są pionki przeciwnika, to nie mogę sie ruszyć o 8.
+*/
+
+/*
+*  Zająć się naprawą while'a w cursorMovement(). Listy działają natomiast dodawanie i usuwanie musi być realizowane w whilu, ponieważ elementy
+*  listy zależą od pozycji kursora. 
 */
