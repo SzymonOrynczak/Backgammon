@@ -115,22 +115,37 @@ struct Game
 };
 
 
-
-
+// inicjacja nowego elementu listy
 PossibleMove* createPossibleMove(PlayerMove move)
 {
-	return NULL;
+	PossibleMove* newMove = (PossibleMove*)malloc(sizeof(PossibleMove));
+
+	if (newMove == NULL)
+	{
+		exit(EXIT_FAILURE);
+	}
+
+	newMove->playerMove = move;
+	newMove->next = NULL;
+	return newMove;
+}
+
+
+void printAuthor()
+{
+	gotoxy(RIGHTVERTICALBORDER + 1, TOPHORIZONTALBORDER);
+	cputs("Szymon Orynczak, s191722");
 }
 
 
 void printBand(Band band)
 {
-	gotoxy(RIGHTVERTICALBORDER + 1, TOPHORIZONTALBORDER);
+	gotoxy(RIGHTVERTICALBORDER + 1, TOPHORIZONTALBORDER + 2);
 	textcolor(WHITE);
 	cputs("Number of white pawns on the band: ");
 	putch(band.nOfWhitePawns + '0');
 
-	gotoxy(RIGHTVERTICALBORDER + 1, TOPHORIZONTALBORDER + 1);
+	gotoxy(RIGHTVERTICALBORDER + 1, TOPHORIZONTALBORDER + 3);
 	textcolor(RED);
 	cputs("Number of red pawns on the band: ");
 	putch(band.nOfRedPawns + '0');
@@ -153,7 +168,7 @@ int returnColorOfCurrentPlayer(Game* game)
 
 void printRollResult(Game* game)
 {
-	gotoxy(RIGHTVERTICALBORDER + 1, TOPHORIZONTALBORDER + 2);
+	gotoxy(RIGHTVERTICALBORDER + 1, TOPHORIZONTALBORDER + 5);
 	textcolor(WHITE);
 	printf("First dice: %d, Second dice: %d", game->dice1Value, game->dice2Value);
 }
@@ -410,13 +425,33 @@ void drawPawnsOnFields(Game* game)
 }
 
 
+// tutaj niech printuje nazwę gracza
+void printWhoseTurn(Game* game)
+{
+	gotoxy(RIGHTVERTICALBORDER + 1, TOPHORIZONTALBORDER + 7);
+	textcolor(returnColorOfCurrentPlayer(game));
+
+	if (game->whoseTurn == WHITEPLAYER)
+	{
+		printf("White player turn");
+	}
+
+	else if (game->whoseTurn == REDPLAYER)
+	{
+		printf("Red player turn");
+	}
+}
+
+
 void printGame(Game* game)
 {
 	textcolor(WHITE);
+	printAuthor();
 	drawBoardBoundaries(&game->board);
 	drawPawnsOnFields(game);
 	printBand(game->board.band);
 	printRollResult(game);
+	printWhoseTurn(game);
 }
 
 
@@ -832,6 +867,7 @@ void captureEnemyPawn(Game* game)
 }
 
 
+// ta funckja chyba powinna korzystać z listy możliwych ruchów
 void movePawn(Game* game, PlayerMove playerMove)
 {
 	if (playerMove.sourceField->nOfPawns > 0 && playerMove.sourceField->color == returnColorOfCurrentPlayer(game))
@@ -863,48 +899,86 @@ void movePawn(Game* game, PlayerMove playerMove)
 	}
 }
 
-// dodawanie do listy
-void addToPossibleMoveList(PossibleMove** head, PlayerMove move)
-{
 
+// zwolnienie pamięci
+void freeList(PossibleMove* head)
+{
+	PossibleMove* current = head;
+	PossibleMove* next;
+	while (current != NULL) {
+		next = current->next;
+		free(current);
+		current = next;
+	}
+}
+
+
+// dodawanie do listy
+void addPossibleMoveToList(PossibleMove** head, PlayerMove move)
+{
+	PossibleMove* newNode = createPossibleMove(move);
+	if (*head == NULL) {
+		*head = newNode;
+	}
+	else {
+		PossibleMove* current = *head;
+		while (current->next != NULL) {
+			current = current->next;
+		}
+		current->next = newNode;
+	}
 }
 
 
 
-void addNormalRollResult(PlayerMove playerMove, int nOfPossibleMoves, Game* game)
+void addNormalRollResult(Game* game, PossibleMove** head, Field* currentField)
 {
 	int dicesSum = game->dice1Value + game->dice2Value;
-	
+
+	PlayerMove move1 = { currentField, &game->board.fieldTable[currentField->index + dicesSum] };
+	PlayerMove move2 = { currentField, &game->board.fieldTable[currentField->index + game->dice1Value] };
+	PlayerMove move3 = { currentField, &game->board.fieldTable[currentField->index + game->dice2Value] };
+
+	addPossibleMoveToList(head, move1);
+	addPossibleMoveToList(head, move2);
+	addPossibleMoveToList(head, move3);
 }
 
 
-void addDoubleRollResult(PlayerMove playerMove, int nOfPossibleMoves, Game* game)
+void addDoubleRollResult(Game* game, PossibleMove** head, Field* currentField)
 {
+	PlayerMove move;
+
 	for (int i = 0; i < game->dice1Value; i++)
 	{
 		//dodaj do listy jako index: dice*1, dice*2, dice*3, dice*4
+		move = { currentField, &game->board.fieldTable[currentField->index + game->dice1Value * i] };
+		addPossibleMoveToList(head, move);
 	}
 }
 
 
 // ta funkcja będzie rozpoznawać, że gracz biały może ruszyć się na mniejsze indeksy, gracz czerwony na większe
 // dodanie sourceField.index + dice1/dice2/suma
-void addPossibleMove(PlayerMove playerMove, int nOfPossibleMoves, Game* game)
+void addPossibleMove(int nOfPossibleMoves, Game* game)
 {
+	PossibleMove* moveHead = NULL;
+	Field* currentField = identifyFieldByCursorPosition(game);
+
 	if (nOfPossibleMoves == 3)
 	{
-		addNormalRollResult(playerMove, nOfPossibleMoves, game);
+		addNormalRollResult(game, &moveHead, currentField);
 	}
 
 	else if (nOfPossibleMoves == 4)
 	{
-		addDoubleRollResult(playerMove, nOfPossibleMoves, game);
+		addDoubleRollResult(game, &moveHead, currentField);
 	}
 }
 
 
 // usuwa ruch z listy możliwych ruchów - został on zweryfikowany jako niemożliwy
-void removeMove()
+void removeMoveFromList(PossibleMove** head, PlayerMove move)
 {
 
 }
@@ -923,6 +997,9 @@ void verifyPossibleMoves(Game* game, PossibleMove* possibleMove)
 }
 
 
+// jeśli najedziemy na pionek w state == PICK_PAWN to na zielono podświetlą sie wszystkie możliwe destinationField z listy jednokierunkowej
+// czyli: clrscr(), printGame i displayPossibleMoves
+// dodatkowo jeśli podniesiemy pionek to pola wciąż powinny świecić się na zielono
 void displayPossibleMoves(Game* game, PossibleMove* possibleMove)
 {
 	while (possibleMove != NULL)
@@ -961,7 +1038,7 @@ int makePlayerMove(Game* game)
 	PlayerMove playerMove;
 	rollDices(game);
 	int nOfPossibleDest = numberOfPossibleDestination(game);
-	// addPossibleMove(nOfPossibleMoves); // dodaje do listy jednokierunkowej pola, które są w odległości dice1, dice2 od indexu na którym znajduje sie kursor
+	addPossibleMove(nOfPossibleDest, game); // dodaje do listy jednokierunkowej pola, które są w odległości dice1, dice2 od indexu na którym znajduje sie kursor
 	// verifyPossibleMoves(game, possibleMove);
 	// displayPossibleMoves(game, possibleMove); // jeśli można bić to trzeba bić - podkreśla na zielono możliwe pola po weryfikacji
 
@@ -1016,7 +1093,7 @@ void performGame(Game* game)
 
 		if (ifContinue)
 		{
-			changePlayerTurn(game); // kto wykonuje ruch bedzie widac po kolorze kursora
+			changePlayerTurn(game);
 		}
 	}
 }
@@ -1038,6 +1115,10 @@ int main()
 //TODO: jeżeli jesteśmy w pick_pawn to po najechaniu na pole pojawiają nam się możliwe ruchy i wtedy możemy podnieść pionek
 //TODO: gracz idzie na podświetlone pole, jeśli jest ono w liście jednokierunkowej possibleMoves to ruch zostaje zatwierdzony
 //TODO: wprowadzanie pionków do bazy: zmienić status np. gameState i wtedy pionki mogą przekraczać 23 indeks w ruchu
+//TODO: przy wczytaniu pliku sie zmienia sie tura !!!
+//TODO: wypisać informacje o autorze i zrobic menu opcji do wyboru (legendę)
+//TODO: dopracowac losowanie gracza zaczynajacego
+//TODO: jeśli podniesiemy czerwony pionek, nie postawimy go i zapiszemy gre to po wczytaniu jest tura białego - a nie czerwonego - naprawić
 
 /*
 *  Jest lista możliwych ruchów, zawiera ona ruchy nieprzekraczające 23 indeksu. Szukamy na liście ruchów, które są aktualnie możliwe.
